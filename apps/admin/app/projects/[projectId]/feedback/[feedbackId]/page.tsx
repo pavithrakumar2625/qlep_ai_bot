@@ -3,6 +3,15 @@ import { notFound } from "next/navigation";
 import { redirect } from "next/navigation";
 import { getFeedbackDetailData } from "../../../../../lib/api";
 import { TriageControls } from "./triage-controls";
+import type { Metadata } from "next";
+
+export const metadata: Metadata = {
+  title: "Feedback Detail",
+  robots: {
+    index: false,
+    follow: false
+  }
+};
 
 interface PageProps {
   params: Promise<{
@@ -21,7 +30,7 @@ export default async function FeedbackDetailPage({ params }: PageProps) {
 
   return (
     <main>
-      <Link className="muted" href="/">Back to dashboard</Link>
+      <Link className="muted" href="/dashboard">Back to dashboard</Link>
       <section className="hero" style={{ marginTop: 16 }}>
         <p className="muted">{workspace.name} / {project.clientName} / {project.name}</p>
         <h1 className="page-title">{feedback.aiAnalysis?.title ?? "Feedback detail"}</h1>

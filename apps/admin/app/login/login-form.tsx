@@ -26,7 +26,7 @@ export function LoginForm() {
       const data = await response.json() as { token: string };
       document.cookie = `qelp_token=${encodeURIComponent(data.token)}; path=/; max-age=${60 * 60 * 12}; samesite=lax`;
       setMessage("Signed in.");
-      router.push("/");
+      router.push("/dashboard");
       router.refresh();
     } catch {
       setMessage("Sign-in failed. Check credentials and API connectivity.");

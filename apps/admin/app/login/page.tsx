@@ -1,4 +1,14 @@
 import { LoginForm } from "./login-form";
+import type { Metadata } from "next";
+
+export const metadata: Metadata = {
+  title: "Login",
+  description: "Sign in to the protected Qelp admin workspace.",
+  robots: {
+    index: false,
+    follow: false
+  }
+};
 
 export default function LoginPage() {
   return (

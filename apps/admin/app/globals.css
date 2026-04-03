@@ -59,6 +59,15 @@ main {
   border: 1px solid var(--line);
 }
 
+.eyebrow {
+  margin: 0;
+  color: var(--teal);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
 .grid { display: grid; gap: 18px; }
 
 .stats {
@@ -84,6 +93,58 @@ main {
 .layout {
   grid-template-columns: 1.45fr 1fr;
   align-items: start;
+}
+
+.hero-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.cta.secondary {
+  background: rgba(255, 255, 255, 0.84);
+  color: var(--text);
+  border: 1px solid var(--line);
+}
+
+.marketing-grid {
+  grid-template-columns: 1.2fr 0.8fr;
+  align-items: start;
+  margin-bottom: 28px;
+}
+
+.marketing-copy {
+  display: grid;
+  gap: 18px;
+}
+
+.marketing-highlight {
+  display: grid;
+  gap: 12px;
+}
+
+.feature-grid {
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.feature-card h3,
+.faq-card h3 {
+  margin: 0 0 10px;
+}
+
+.faq-grid {
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+}
+
+.mini-list {
+  display: grid;
+  gap: 10px;
+}
+
+.mini-list strong {
+  display: inline;
+  font-size: 1rem;
+  margin: 0;
 }
 
 .list { display: grid; gap: 12px; }
@@ -186,6 +247,7 @@ main {
 }
 
 @media (max-width: 920px) {
+  .marketing-grid,
   .layout,
   .detail-grid {
     grid-template-columns: 1fr;
