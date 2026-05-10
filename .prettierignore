@@ -1,0 +1,8 @@
+node_modules
+dist
+.next
+coverage
+apps/api/storage
+apps/api/migrations
+packages/widget/dist
+package-lock.json

@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { redirect } from "next/navigation";
 import { getFeedbackDetailData } from "../../../../../lib/api";
 import { TriageControls } from "./triage-controls";
+import { CommentsThread } from "./comments-thread";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
@@ -26,7 +27,7 @@ export default async function FeedbackDetailPage({ params }: PageProps) {
   if (data && !data.authenticated) redirect("/login");
   if (!data) notFound();
 
-  const { workspace, project, feedback, users, owner, usingFallback } = data;
+  const { workspace, project, feedback, users, owner, currentUser, usingFallback } = data;
 
   return (
     <main>
@@ -80,6 +81,13 @@ export default async function FeedbackDetailPage({ params }: PageProps) {
             <p className="muted" style={{ marginTop: 18 }}>Suggested fix</p>
             <p>{feedback.aiAnalysis?.suggestedFix}</p>
           </article>
+          <CommentsThread
+            feedbackId={feedback.id}
+            initialComments={feedback.comments}
+            users={users}
+            currentUserId={currentUser?.id ?? null}
+            disabled={usingFallback}
+          />
         </aside>
       </section>
     </main>

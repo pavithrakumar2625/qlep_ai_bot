@@ -5,3 +5,5 @@ coverage
 .turbo
 .env
 *.log
+apps/api/storage/
+*.tsbuildinfo

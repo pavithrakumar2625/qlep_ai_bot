@@ -1,0 +1,57 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: qelp
+      POSTGRES_PASSWORD: qelp
+      POSTGRES_DB: qelp
+    ports:
+      - "5432:5432"
+    volumes:
+      - qelp_pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U qelp -d qelp"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  api:
+    profiles: ["full"]
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgres://qelp:qelp@postgres:5432/qelp
+      AUTH_SECRET: ${AUTH_SECRET:?set AUTH_SECRET to a 32+ char value}
+      ADMIN_ORIGIN: ${ADMIN_ORIGIN:-http://localhost:3000}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+      AI_PROVIDER: ${AI_PROVIDER:-auto}
+      STT_PROVIDER: ${STT_PROVIDER:-none}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "4000:4000"
+    volumes:
+      - qelp_storage:/app/storage
+
+  admin:
+    profiles: ["full"]
+    build:
+      context: .
+      dockerfile: apps/admin/Dockerfile
+    environment:
+      NODE_ENV: production
+      NEXT_PUBLIC_API_BASE_URL: http://localhost:4000
+      PUBLIC_API_BASE_URL: http://api:4000
+    depends_on:
+      - api
+    ports:
+      - "3000:3000"
+
+volumes:
+  qelp_pg_data:
+  qelp_storage:

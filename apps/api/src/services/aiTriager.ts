@@ -1,6 +1,9 @@
 import { z } from "zod";
 import { createId, scorePriority, type AIAnalysis, type EmotionAnalysis, type FeedbackItem, type PriorityInput } from "@qelp/shared/contracts";
 import { env } from "../config/env.js";
+import { logger } from "../logger.js";
+
+const MAX_PROMPT_FIELD_CHARS = 8000;
 
 export interface AIProvider {
   analyze(feedback: FeedbackItem): Promise<AIAnalysis>;
@@ -62,9 +65,18 @@ class FailoverAIProvider implements AIProvider {
       return this.fallback.analyze(feedback);
     }
 
+    const started = Date.now();
     try {
       return await provider.analyze(feedback);
-    } catch {
+    } catch (error) {
+      logger.warn(
+        {
+          feedbackId: feedback.id,
+          durationMs: Date.now() - started,
+          err: error instanceof Error ? { message: error.message, name: error.name } : error,
+        },
+        "ai-triager: provider call failed, using deterministic fallback",
+      );
       return this.fallback.analyze(feedback);
     }
   }
@@ -94,6 +106,7 @@ async function callResponsesApi(input: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${input.apiKey}`
     },
+    signal: AbortSignal.timeout(env.AI_TIMEOUT_MS),
     body: JSON.stringify({
       model: input.model,
       reasoning: env.AI_REASONING_EFFORT === "none" ? undefined : { effort: env.AI_REASONING_EFFORT },
@@ -160,16 +173,24 @@ async function callResponsesApi(input: {
   return aiResponseSchema.parse(JSON.parse(jsonText));
 }
 
+function truncate(value: string | null | undefined, max: number) {
+  if (typeof value !== "string") return value ?? null;
+  if (value.length <= max) return value;
+  return `${value.slice(0, max)}…[truncated ${value.length - max} chars]`;
+}
+
 function buildPrompt(feedback: FeedbackItem) {
   return JSON.stringify(
     {
-      message: feedback.content.message,
-      stepsToReproduce: feedback.content.stepsToReproduce,
-      expectedBehavior: feedback.content.expectedBehavior,
-      actualBehavior: feedback.content.actualBehavior,
+      message: truncate(feedback.content.message, MAX_PROMPT_FIELD_CHARS),
+      stepsToReproduce: feedback.content.stepsToReproduce
+        .slice(0, 20)
+        .map((step) => truncate(step, 1000)),
+      expectedBehavior: truncate(feedback.content.expectedBehavior, 2000),
+      actualBehavior: truncate(feedback.content.actualBehavior, 2000),
       affectedUsers: feedback.content.affectedUsers ?? 1,
       environment: feedback.environment,
-      voiceTranscript: feedback.voiceTranscript?.transcript ?? null
+      voiceTranscript: truncate(feedback.voiceTranscript?.transcript ?? null, MAX_PROMPT_FIELD_CHARS),
     },
     null,
     2,

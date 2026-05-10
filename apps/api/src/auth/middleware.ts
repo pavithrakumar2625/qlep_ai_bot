@@ -1,7 +1,7 @@
 import type { NextFunction, Request, Response } from "express";
 import type { User } from "@qelp/shared/contracts";
 import { verifyAuthToken } from "../services/authTokens.js";
-import { repository } from "../repositories/mysqlRepository.js";
+import { repository } from "../repositories/postgresRepository.js";
 import { extractBearerToken } from "./requestAuth.js";
 
 declare module "express-serve-static-core" {

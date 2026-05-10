@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Qelp widget demo</title>
+    <style>
+      :root { font-family: system-ui, sans-serif; color: #171411; }
+      body { margin: 0; padding: 64px 32px; background: #f4eee3; }
+      main { max-width: 720px; margin: 0 auto; }
+      h1 { margin-bottom: 8px; }
+      p { color: #6d665f; line-height: 1.5; }
+      .panel { background: #fff; border-radius: 16px; padding: 24px; box-shadow: 0 18px 42px rgba(28,21,17,0.08); margin-top: 24px; }
+      code { background: #efe4d6; padding: 2px 6px; border-radius: 6px; }
+      .hint { font-size: 13px; color: #6d665f; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Qelp widget demo</h1>
+      <p>This page embeds the Qelp feedback widget. Click the floating "Send feedback" button to capture a screenshot, record a voice note, and submit feedback to your local API.</p>
+
+      <section class="panel">
+        <h2>How to embed</h2>
+        <pre><code>&lt;script src="/qelp-widget.js"&gt;&lt;/script&gt;
+&lt;script&gt;
+  QelpWidget.init({
+    apiBaseUrl: "http://localhost:4000",
+    workspaceId: "ws_studio",
+    projectId: "proj_meteor",
+    projectKey: "widget_live_meteor",
+    themeColor: "#0f766e"
+  });
+&lt;/script&gt;</code></pre>
+        <p class="hint">For local testing, copy <code>dist/qelp-widget.js</code> next to this HTML file (or serve them from the same static server) so the script tag below can find it.</p>
+      </section>
+
+      <section class="panel">
+        <h2>Why this works</h2>
+        <p>The widget uses <code>html2canvas</code> for screenshots, the <code>MediaRecorder</code> API for voice notes, and uploads each blob to <code>POST /uploads</code> on the API. The feedback POST then references the attachment IDs.</p>
+      </section>
+    </main>
+
+    <script src="../dist/qelp-widget.js"></script>
+    <script>
+      window.QelpWidget.init({
+        apiBaseUrl: "http://localhost:4000",
+        workspaceId: "ws_studio",
+        projectId: "proj_meteor",
+        projectKey: "widget_live_meteor",
+        themeColor: "#0f766e"
+      });
+    </script>
+  </body>
+</html>

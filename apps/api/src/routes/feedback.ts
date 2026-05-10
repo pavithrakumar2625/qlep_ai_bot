@@ -2,8 +2,10 @@ import { Router } from "express";
 import { z } from "zod";
 import type { FeedbackStatus } from "@qelp/shared/contracts";
 import { requireAuth, requireRole } from "../auth/middleware.js";
-import { repository } from "../repositories/mysqlRepository.js";
-import { aiTriager } from "../services/aiTriager.js";
+import { feedbackPublicLimiter } from "../middleware/rateLimit.js";
+import { repository } from "../repositories/postgresRepository.js";
+import { commentsRouter } from "./comments.js";
+import { dispatchTriage } from "../services/triagePipeline.js";
 
 const statusSchema = z.enum(["new", "triaged", "in_progress", "resolved", "archived"]);
 
@@ -14,24 +16,19 @@ const feedbackPayloadSchema = z.object({
   reporter: z.object({
     id: z.string().optional(),
     email: z.string().email().optional(),
-    name: z.string().optional()
+    name: z.string().optional(),
   }),
   content: z.object({
-    message: z.string().min(10),
-    stepsToReproduce: z.array(z.string()).default([]),
-    expectedBehavior: z.string().optional(),
-    actualBehavior: z.string().optional(),
-    affectedUsers: z.number().int().positive().optional()
+    message: z.string().min(10).max(20000),
+    stepsToReproduce: z.array(z.string().max(2000)).max(50).default([]),
+    expectedBehavior: z.string().max(4000).optional(),
+    actualBehavior: z.string().max(4000).optional(),
+    affectedUsers: z.number().int().positive().max(1_000_000).optional(),
   }),
-  attachments: z.array(
-    z.object({
-      id: z.string(),
-      type: z.enum(["image", "audio", "video", "file"]),
-      url: z.string().url(),
-      mimeType: z.string(),
-      createdAt: z.string()
-    }),
-  ).default([]),
+  attachments: z
+    .array(z.object({ id: z.string() }))
+    .max(20)
+    .default([]),
   environment: z.object({
     url: z.string().url(),
     route: z.string().optional(),
@@ -41,43 +38,68 @@ const feedbackPayloadSchema = z.object({
     userAgent: z.string().optional(),
     viewport: z.object({
       width: z.number(),
-      height: z.number()
-    })
+      height: z.number(),
+    }),
   }),
-  voiceTranscript: z.object({
-    transcript: z.string(),
-    durationSeconds: z.number().nonnegative()
-  }).nullable().default(null)
+  voiceTranscript: z
+    .object({
+      transcript: z.string().max(20000),
+      durationSeconds: z.number().nonnegative(),
+    })
+    .nullable()
+    .default(null),
 });
 
 const feedbackUpdateSchema = z.object({
   status: statusSchema.optional(),
   assignedTo: z.string().nullable().optional(),
-  labels: z.array(z.string()).optional()
+  labels: z.array(z.string()).max(50).optional(),
 });
 
 export const feedbackRouter = Router();
+feedbackRouter.use("/:feedbackId/comments", commentsRouter);
 
 function paramValue(value: string | string[]) {
   return Array.isArray(value) ? value[0] : value;
 }
 
+const priorityLabelSchema = z.enum(["low", "medium", "high", "urgent"]);
+
 feedbackRouter.get("/", requireAuth, async (request, response) => {
-  const status = typeof request.query.status === "string" ? statusSchema.safeParse(request.query.status).data as FeedbackStatus | undefined : undefined;
-  const workspaceId = typeof request.query.workspaceId === "string" ? request.query.workspaceId : undefined;
-  const projectId = typeof request.query.projectId === "string" ? request.query.projectId : undefined;
+  const status =
+    typeof request.query.status === "string"
+      ? (statusSchema.safeParse(request.query.status).data as FeedbackStatus | undefined)
+      : undefined;
+  const workspaceId =
+    typeof request.query.workspaceId === "string" ? request.query.workspaceId : undefined;
+  const projectId =
+    typeof request.query.projectId === "string" ? request.query.projectId : undefined;
+  const priorityLabel =
+    typeof request.query.priorityLabel === "string"
+      ? priorityLabelSchema.safeParse(request.query.priorityLabel).data
+      : undefined;
+  const query =
+    typeof request.query.q === "string" ? request.query.q.trim().slice(0, 200) || undefined : undefined;
+  const cursor = typeof request.query.cursor === "string" ? request.query.cursor : undefined;
+  const limit =
+    typeof request.query.limit === "string" ? Number.parseInt(request.query.limit, 10) || undefined : undefined;
+
   if (workspaceId && workspaceId !== request.authUser?.workspaceId) {
     response.status(403).json({ error: "Workspace access denied" });
     return;
   }
 
-  response.json({
-    items: await repository.listFeedback({
-      status,
-      workspaceId: workspaceId ?? request.authUser?.workspaceId,
-      projectId
-    })
+  const result = await repository.listFeedback({
+    status,
+    workspaceId: workspaceId ?? request.authUser?.workspaceId,
+    projectId,
+    priorityLabel,
+    query,
+    cursor,
+    limit,
   });
+
+  response.json(result);
 });
 
 feedbackRouter.get("/:feedbackId", requireAuth, async (request, response) => {
@@ -94,7 +116,7 @@ feedbackRouter.get("/:feedbackId", requireAuth, async (request, response) => {
   response.json({ item });
 });
 
-feedbackRouter.post("/", async (request, response) => {
+feedbackRouter.post("/", feedbackPublicLimiter, async (request, response) => {
   const parsed = feedbackPayloadSchema.safeParse(request.body);
   if (!parsed.success) {
     response.status(400).json({ error: "Invalid payload", issues: parsed.error.flatten() });
@@ -113,14 +135,9 @@ feedbackRouter.post("/", async (request, response) => {
   }
 
   const created = await repository.createFeedback(parsed.data);
-  const aiAnalysis = await aiTriager.analyze(created);
-  const updated = await repository.updateFeedback(created.id, {
-    aiAnalysis,
-    priority: aiAnalysis.priorityScore,
-    labels: [aiAnalysis.category]
-  });
+  dispatchTriage(created.id);
 
-  response.status(201).json({ item: updated });
+  response.status(201).json({ item: created });
 });
 
 feedbackRouter.patch(
@@ -128,23 +145,32 @@ feedbackRouter.patch(
   requireAuth,
   requireRole(["owner", "manager", "contributor"]),
   async (request, response) => {
-  const feedbackId = paramValue(request.params.feedbackId);
-  const existing = await repository.getFeedback(feedbackId);
-  if (!existing) {
-    response.status(404).json({ error: "Feedback item not found" });
-    return;
-  }
-  if (existing.workspaceId !== request.authUser?.workspaceId) {
-    response.status(403).json({ error: "Workspace access denied" });
-    return;
-  }
-  const parsed = feedbackUpdateSchema.safeParse(request.body);
-  if (!parsed.success) {
-    response.status(400).json({ error: "Invalid update payload", issues: parsed.error.flatten() });
-    return;
-  }
+    const feedbackId = paramValue(request.params.feedbackId);
+    const existing = await repository.getFeedback(feedbackId);
+    if (!existing) {
+      response.status(404).json({ error: "Feedback item not found" });
+      return;
+    }
+    if (existing.workspaceId !== request.authUser?.workspaceId) {
+      response.status(403).json({ error: "Workspace access denied" });
+      return;
+    }
 
-  const updated = await repository.updateFeedback(feedbackId, parsed.data);
+    const parsed = feedbackUpdateSchema.safeParse(request.body);
+    if (!parsed.success) {
+      response.status(400).json({ error: "Invalid update payload", issues: parsed.error.flatten() });
+      return;
+    }
 
-  response.json({ item: updated });
-});
+    if (parsed.data.assignedTo) {
+      const assignee = await repository.getUserById(parsed.data.assignedTo);
+      if (!assignee || assignee.workspaceId !== request.authUser?.workspaceId) {
+        response.status(400).json({ error: "Cannot assign to a user outside this workspace" });
+        return;
+      }
+    }
+
+    const updated = await repository.updateFeedback(feedbackId, parsed.data);
+    response.json({ item: updated });
+  },
+);

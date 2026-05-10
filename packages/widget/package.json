@@ -4,12 +4,16 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "tsc -p tsconfig.json"
+    "build": "esbuild src/index.ts --bundle --format=iife --global-name=QelpWidgetBundle --outfile=dist/qelp-widget.js --minify --target=es2020",
+    "build:watch": "esbuild src/index.ts --bundle --format=iife --global-name=QelpWidgetBundle --outfile=dist/qelp-widget.js --target=es2020 --watch",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@qelp/shared": "0.1.0"
+    "@qelp/shared": "0.1.0",
+    "html2canvas": "^1.4.1"
   },
   "devDependencies": {
+    "esbuild": "^0.24.2",
     "typescript": "^5.8.2"
   }
 }

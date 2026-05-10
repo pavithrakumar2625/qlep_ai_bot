@@ -10,11 +10,15 @@ import {
   type User
 } from "@qelp/shared/contracts";
 import { cookies } from "next/headers";
-
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? process.env.PUBLIC_API_BASE_URL ?? "http://localhost:4000";
+import { API_BASE_URL, AUTH_COOKIE_NAME } from "./server-config";
 
 interface ListResponse<T> {
   items: T[];
+}
+
+interface PagedResponse<T> {
+  items: T[];
+  nextCursor: string | null;
 }
 
 interface ItemResponse<T> {
@@ -25,9 +29,67 @@ export interface AgencyDashboardData {
   workspace: AgencyWorkspace;
   projects: ClientProject[];
   items: FeedbackItem[];
+  nextCursor: string | null;
   summary: ReturnType<typeof getDashboardSummary>;
   usingFallback: boolean;
   authenticated: boolean;
+}
+
+export interface DashboardFilters {
+  status?: string;
+  projectId?: string;
+  priorityLabel?: string;
+  q?: string;
+  cursor?: string;
+}
+
+export interface WorkspaceAnalytics {
+  days: number;
+  total: number;
+  meanPriority: number;
+  meanConfidence: number;
+  volumeByDay: { day: string; count: number }[];
+  byPriority: { label: string; count: number }[];
+  byCategory: { category: string; count: number }[];
+  byStatus: { status: string; count: number }[];
+}
+
+export interface WorkspaceSettingsData {
+  workspace: AgencyWorkspace;
+  projects: ClientProject[];
+  users: User[];
+  currentUser: User | null;
+  authenticated: boolean;
+}
+
+export async function getWorkspaceSettingsData(): Promise<WorkspaceSettingsData | null> {
+  try {
+    const workspaces = await fetchJson<ListResponse<AgencyWorkspace>>("/workspaces");
+    const workspace = workspaces.items[0];
+    if (!workspace) return null;
+    const [projects, users, me] = await Promise.all([
+      fetchJson<ListResponse<ClientProject>>(`/workspaces/${workspace.id}/projects`),
+      fetchJson<ListResponse<User>>(`/workspaces/${workspace.id}/users`),
+      fetchJson<{ user: User }>("/auth/me").catch(() => null),
+    ]);
+    return {
+      workspace,
+      projects: projects.items,
+      users: users.items,
+      currentUser: me?.user ?? null,
+      authenticated: true,
+    };
+  } catch {
+    return null;
+  }
+}
+
+export async function getWorkspaceAnalytics(workspaceId: string, days = 30): Promise<WorkspaceAnalytics | null> {
+  try {
+    return await fetchJson<WorkspaceAnalytics>(`/workspaces/${workspaceId}/analytics?days=${days}`);
+  } catch {
+    return null;
+  }
 }
 
 export interface FeedbackDetailData {
@@ -36,12 +98,13 @@ export interface FeedbackDetailData {
   feedback: FeedbackItem;
   users: User[];
   owner: User | null;
+  currentUser: User | null;
   usingFallback: boolean;
   authenticated: boolean;
 }
 
 async function fetchJson<T>(path: string): Promise<T> {
-  const token = (await cookies()).get("qelp_token")?.value;
+  const token = (await cookies()).get(AUTH_COOKIE_NAME)?.value;
   const response = await fetch(`${API_BASE_URL}${path}`, {
     next: { revalidate: 0 },
     cache: "no-store",
@@ -51,41 +114,74 @@ async function fetchJson<T>(path: string): Promise<T> {
   return response.json() as Promise<T>;
 }
 
-function fallbackDashboard(): AgencyDashboardData {
+function fallbackDashboard(filters: DashboardFilters = {}): AgencyDashboardData {
   const workspace = mockWorkspaces[0];
   const projects = mockProjects.filter((item) => item.workspaceId === workspace.id);
-  const items = mockFeedbackItems.filter((item) => item.workspaceId === workspace.id);
+  const allItems = mockFeedbackItems.filter((item) => item.workspaceId === workspace.id);
+  const items = applyMockFilters(allItems, filters);
   return {
     workspace,
     projects,
     items,
-    summary: getDashboardSummary(items),
+    nextCursor: null,
+    summary: getDashboardSummary(allItems),
     usingFallback: true,
     authenticated: false
   };
 }
 
-export async function getAgencyDashboardData(): Promise<AgencyDashboardData> {
+function applyMockFilters(items: FeedbackItem[], filters: DashboardFilters) {
+  return items.filter((item) => {
+    if (filters.status && item.status !== filters.status) return false;
+    if (filters.projectId && item.projectId !== filters.projectId) return false;
+    if (filters.priorityLabel && item.priority.label !== filters.priorityLabel) return false;
+    if (filters.q) {
+      const needle = filters.q.toLowerCase();
+      const haystack = `${item.content.message} ${item.aiAnalysis?.title ?? ""}`.toLowerCase();
+      if (!haystack.includes(needle)) return false;
+    }
+    return true;
+  });
+}
+
+function buildQuery(filters: DashboardFilters) {
+  const params = new URLSearchParams();
+  if (filters.status) params.set("status", filters.status);
+  if (filters.projectId) params.set("projectId", filters.projectId);
+  if (filters.priorityLabel) params.set("priorityLabel", filters.priorityLabel);
+  if (filters.q) params.set("q", filters.q);
+  if (filters.cursor) params.set("cursor", filters.cursor);
+  const qs = params.toString();
+  return qs ? `?${qs}` : "";
+}
+
+export async function getAgencyDashboardData(
+  filters: DashboardFilters = {},
+): Promise<AgencyDashboardData> {
   try {
     const workspaces = await fetchJson<ListResponse<AgencyWorkspace>>("/workspaces");
     const workspace = workspaces.items[0];
-    if (!workspace) return fallbackDashboard();
+    if (!workspace) return fallbackDashboard(filters);
 
-    const [projects, feedback] = await Promise.all([
+    const [projects, feedback, summaryFeedback] = await Promise.all([
       fetchJson<ListResponse<ClientProject>>(`/workspaces/${workspace.id}/projects`),
-      fetchJson<ListResponse<FeedbackItem>>(`/workspaces/${workspace.id}/feedback`)
+      fetchJson<PagedResponse<FeedbackItem>>(
+        `/feedback${buildQuery({ ...filters, projectId: filters.projectId })}`,
+      ),
+      fetchJson<PagedResponse<FeedbackItem>>(`/workspaces/${workspace.id}/feedback`),
     ]);
 
     return {
       workspace,
       projects: projects.items,
       items: feedback.items,
-      summary: getDashboardSummary(feedback.items),
+      nextCursor: feedback.nextCursor,
+      summary: getDashboardSummary(summaryFeedback.items),
       usingFallback: false,
       authenticated: true
     };
   } catch {
-    return fallbackDashboard();
+    return fallbackDashboard(filters);
   }
 }
 
@@ -95,10 +191,11 @@ export async function getFeedbackDetailData(projectId: string, feedbackId: strin
     const workspace = workspaces.items[0];
     if (!workspace) return fallbackDetail(projectId, feedbackId);
 
-    const [projects, users, feedbackResponse] = await Promise.all([
+    const [projects, users, feedbackResponse, me] = await Promise.all([
       fetchJson<ListResponse<ClientProject>>(`/workspaces/${workspace.id}/projects`),
       fetchJson<ListResponse<User>>(`/workspaces/${workspace.id}/users`),
-      fetchJson<ItemResponse<FeedbackItem>>(`/feedback/${feedbackId}`)
+      fetchJson<ItemResponse<FeedbackItem>>(`/feedback/${feedbackId}`),
+      fetchJson<{ user: User }>("/auth/me").catch(() => null),
     ]);
 
     const project = projects.items.find((item) => item.id === projectId);
@@ -111,6 +208,7 @@ export async function getFeedbackDetailData(projectId: string, feedbackId: strin
       feedback,
       users: users.items,
       owner: feedback.assignedTo ? users.items.find((item) => item.id === feedback.assignedTo) ?? null : null,
+      currentUser: me?.user ?? null,
       usingFallback: false,
       authenticated: true
     };
@@ -131,6 +229,7 @@ function fallbackDetail(projectId: string, feedbackId: string): FeedbackDetailDa
     feedback,
     users: mockUsers.filter((item) => item.workspaceId === workspace.id),
     owner: feedback.assignedTo ? mockUsers.find((item) => item.id === feedback.assignedTo) ?? null : null,
+    currentUser: null,
     usingFallback: true,
     authenticated: false
   };

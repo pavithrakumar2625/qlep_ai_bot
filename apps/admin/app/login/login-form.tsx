@@ -3,8 +3,6 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:4000";
-
 export function LoginForm() {
   const router = useRouter();
   const [email, setEmail] = useState("");
@@ -16,20 +14,23 @@ export function LoginForm() {
     setIsSubmitting(true);
     setMessage("Signing in...");
     try {
-      const response = await fetch(`${API_BASE_URL}/auth/login`, {
+      const response = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password })
+        body: JSON.stringify({ email, password }),
       });
 
-      if (!response.ok) throw new Error("Invalid credentials");
-      const data = await response.json() as { token: string };
-      document.cookie = `qelp_token=${encodeURIComponent(data.token)}; path=/; max-age=${60 * 60 * 12}; samesite=lax`;
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data.error ?? "Invalid credentials");
+      }
+
       setMessage("Signed in.");
       router.push("/dashboard");
       router.refresh();
-    } catch {
-      setMessage("Sign-in failed. Check credentials and API connectivity.");
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : "Sign-in failed.";
+      setMessage(`${reason}. Check credentials and API connectivity.`);
     } finally {
       setIsSubmitting(false);
     }

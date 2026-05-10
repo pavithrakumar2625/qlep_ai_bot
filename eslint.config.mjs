@@ -1,0 +1,68 @@
+import js from "@eslint/js";
+import tseslint from "typescript-eslint";
+
+export default [
+  {
+    ignores: [
+      "**/node_modules/**",
+      "**/dist/**",
+      "**/.next/**",
+      "**/coverage/**",
+      "**/migrations/**",
+      "apps/api/storage/**",
+      "packages/widget/dist/**",
+      "apps/admin/next-env.d.ts",
+    ],
+  },
+  js.configs.recommended,
+  ...tseslint.configs.recommended,
+  {
+    languageOptions: {
+      parserOptions: { ecmaVersion: "latest", sourceType: "module" },
+      globals: {
+        console: "readonly",
+        process: "readonly",
+        Buffer: "readonly",
+        URL: "readonly",
+        URLSearchParams: "readonly",
+        fetch: "readonly",
+        FormData: "readonly",
+        Blob: "readonly",
+        AbortSignal: "readonly",
+        ReadableStream: "readonly",
+        setImmediate: "readonly",
+        setTimeout: "readonly",
+        document: "readonly",
+        window: "readonly",
+        navigator: "readonly",
+        performance: "readonly",
+        MediaRecorder: "readonly",
+        confirm: "readonly",
+        HTMLInputElement: "readonly",
+        HTMLTextAreaElement: "readonly",
+        HTMLButtonElement: "readonly",
+        HTMLDivElement: "readonly",
+        HTMLElement: "readonly",
+        HTMLParagraphElement: "readonly",
+        HTMLImageElement: "readonly",
+        HTMLAudioElement: "readonly",
+        HTMLElementTagNameMap: "readonly",
+        Element: "readonly",
+        Headers: "readonly",
+        Request: "readonly",
+        Response: "readonly",
+        Uint8Array: "readonly",
+        ArrayBuffer: "readonly",
+        globalThis: "readonly",
+      },
+    },
+    rules: {
+      "@typescript-eslint/no-unused-vars": [
+        "warn",
+        { argsIgnorePattern: "^_", varsIgnorePattern: "^_" },
+      ],
+      "@typescript-eslint/no-explicit-any": "warn",
+      "no-empty": ["warn", { allowEmptyCatch: true }],
+    },
+  },
+];
