@@ -71,6 +71,21 @@ analyticsRouter.get("/:workspaceId/analytics", async (request, response) => {
 
   const means = meansRow[0];
 
+  // The dashboard KPI tiles describe the workspace as a whole, not just the
+  // analytics window — compute these against every feedback row for this
+  // workspace so they don't shrink as the page size shrinks.
+  const summaryRow = await db
+    .select({
+      openCount: sql<number>`count(*) filter (where ${feedbackItems.status} not in ('resolved', 'archived'))::int`,
+      urgentCount: sql<number>`count(*) filter (where ${feedbackItems.priority} ->> 'label' = 'urgent')::int`,
+      negativeEmotionCount: sql<number>`count(*) filter (where ${feedbackItems.aiAnalysis} -> 'emotion' ->> 'primary' = 'negative')::int`,
+      averageConfidence: sql<number | null>`avg((${feedbackItems.aiAnalysis} ->> 'confidence')::numeric) filter (where ${feedbackItems.aiAnalysis} is not null)`,
+    })
+    .from(feedbackItems)
+    .where(eq(feedbackItems.workspaceId, workspaceId));
+
+  const summary = summaryRow[0];
+
   response.json({
     days,
     total: means?.total ?? 0,
@@ -80,5 +95,13 @@ analyticsRouter.get("/:workspaceId/analytics", async (request, response) => {
     byPriority: byPriorityRows,
     byCategory: byCategoryRows,
     byStatus: byStatusRows,
+    summary: {
+      openCount: summary?.openCount ?? 0,
+      urgentCount: summary?.urgentCount ?? 0,
+      negativeEmotionCount: summary?.negativeEmotionCount ?? 0,
+      averageConfidence: summary?.averageConfidence
+        ? Math.round(Number(summary.averageConfidence) * 100)
+        : 0,
+    },
   });
 });

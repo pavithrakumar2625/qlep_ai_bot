@@ -31,6 +31,7 @@ export interface AgencyDashboardData {
   items: FeedbackItem[];
   nextCursor: string | null;
   summary: ReturnType<typeof getDashboardSummary>;
+  analytics: WorkspaceAnalytics | null;
   usingFallback: boolean;
   authenticated: boolean;
 }
@@ -52,6 +53,12 @@ export interface WorkspaceAnalytics {
   byPriority: { label: string; count: number }[];
   byCategory: { category: string; count: number }[];
   byStatus: { status: string; count: number }[];
+  summary: {
+    openCount: number;
+    urgentCount: number;
+    negativeEmotionCount: number;
+    averageConfidence: number;
+  };
 }
 
 export interface WorkspaceSettingsData {
@@ -125,6 +132,7 @@ function fallbackDashboard(filters: DashboardFilters = {}): AgencyDashboardData 
     items,
     nextCursor: null,
     summary: getDashboardSummary(allItems),
+    analytics: null,
     usingFallback: true,
     authenticated: false
   };
@@ -163,20 +171,30 @@ export async function getAgencyDashboardData(
     const workspace = workspaces.items[0];
     if (!workspace) return fallbackDashboard(filters);
 
-    const [projects, feedback, summaryFeedback] = await Promise.all([
+    const [projects, feedback, analytics] = await Promise.all([
       fetchJson<ListResponse<ClientProject>>(`/workspaces/${workspace.id}/projects`),
       fetchJson<PagedResponse<FeedbackItem>>(
         `/feedback${buildQuery({ ...filters, projectId: filters.projectId })}`,
       ),
-      fetchJson<PagedResponse<FeedbackItem>>(`/workspaces/${workspace.id}/feedback`),
+      fetchJson<WorkspaceAnalytics>(`/workspaces/${workspace.id}/analytics?days=30`).catch(
+        () => null,
+      ),
     ]);
+
+    // KPIs come from the analytics endpoint, which aggregates server-side
+    // across the entire workspace. Computing them client-side from the
+    // paginated /feedback response would shrink the counts to whatever fit
+    // on the current page (default 25 items).
+    const summary =
+      analytics?.summary ?? getDashboardSummary(feedback.items);
 
     return {
       workspace,
       projects: projects.items,
       items: feedback.items,
       nextCursor: feedback.nextCursor,
-      summary: getDashboardSummary(summaryFeedback.items),
+      summary,
+      analytics,
       usingFallback: false,
       authenticated: true
     };

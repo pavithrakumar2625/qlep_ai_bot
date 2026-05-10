@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import type { Metadata } from "next";
-import { getAgencyDashboardData, getWorkspaceAnalytics, type DashboardFilters } from "../../lib/api";
+import { getAgencyDashboardData, type DashboardFilters } from "../../lib/api";
 import { AnalyticsCharts } from "./charts";
 
 export const metadata: Metadata = {
@@ -35,10 +35,9 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
     cursor: pickString(params.cursor),
   };
 
-  const { workspace, projects, items, nextCursor, summary, usingFallback, authenticated } =
+  const { workspace, projects, items, nextCursor, summary, analytics, usingFallback, authenticated } =
     await getAgencyDashboardData(filters);
   if (!authenticated) redirect("/login");
-  const analytics = usingFallback ? null : await getWorkspaceAnalytics(workspace.id);
 
   function buildHref(overrides: Partial<DashboardFilters>) {
     const merged = { ...filters, ...overrides };
