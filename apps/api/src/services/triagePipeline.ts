@@ -41,11 +41,30 @@ export async function runTriage(feedbackId: string): Promise<void> {
     if (!refreshed) return;
 
     const aiAnalysis = await aiTriager.analyze(refreshed);
-    await repository.updateFeedback(feedbackId, {
-      aiAnalysis,
-      priority: aiAnalysis.priorityScore,
-      labels: [aiAnalysis.category],
+
+    // The AI call can take many seconds; re-read the row so we don't clobber
+    // changes a curator made via PATCH /feedback/:id while we were waiting.
+    // We only set priority when triage hasn't already completed/failed (avoids
+    // double-runs racing each other), and we *merge* the AI category into
+    // existing labels rather than replacing them, so curator-set labels stick.
+    const latest = await repository.getFeedback(feedbackId);
+    if (!latest) return;
+
+    const latestStatusRow = await db.query.feedbackItems.findFirst({
+      where: eq(feedbackItems.id, feedbackId),
+      columns: { triageStatus: true },
     });
+
+    const mergedLabels = Array.from(new Set([...latest.labels, aiAnalysis.category]));
+    const update: Parameters<typeof repository.updateFeedback>[1] = {
+      aiAnalysis,
+      labels: mergedLabels,
+    };
+    if (latestStatusRow?.triageStatus === "pending") {
+      update.priority = aiAnalysis.priorityScore;
+    }
+
+    await repository.updateFeedback(feedbackId, update);
     await db
       .update(feedbackItems)
       .set({ triageStatus: "completed" })
