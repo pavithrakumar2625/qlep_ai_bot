@@ -1,28 +1,48 @@
-Tagline
-Transforming user feedback into intelligent solutions.
-Introduction
-Qlep is an AI-powered bug reporting and feedback system designed to enhance traditional tools by
-not only collecting user feedback but also analyzing and suggesting solutions intelligently.
-Problem Statement
-Developers face challenges such as unclear feedback, time-consuming analysis, and difficulty
-prioritizing issues. Existing tools lack intelligent assistance.
-Proposed Solution
-Qlep integrates AI to analyze feedback, detect emotions, prioritize issues, and suggest fixes
-automatically.
-Key Features
-1. Smart Bug Reporting with screenshots and system info. 2. AI Bug Fix Suggestion Engine. 3.
-Voice-to-Feedback with Emotion Detection. 4. Smart Dashboard with analytics. 5. Auto Bug
-Prioritization. 6. Admin Panel for management.
-System Architecture
-Frontend: HTML, CSS, JavaScript Backend: Node.js (Express) Database: MySQL AI: LLM APIs
-(Groq/OpenAI)
-Workflow
-User submits feedback → AI processes input → Suggestion generated → Stored in DB → Admin
-manages via dashboard.
-Advantages
-Improves productivity, reduces workload, speeds up bug fixing, enhances UX.
-Future Enhancements
-GitHub integration, screen recording, chatbot support, mobile app.
-Conclusion
-Qlep redefines feedback systems by combining AI with user reporting, making it a powerful tool for
-developers.
+# Qelp — product brief
+
+**Tagline:** Transforming user feedback into intelligent solutions.
+
+## Overview
+
+Qelp is an AI-first feedback and bug triage platform for agencies and freelancers managing multiple client products. End users submit feedback through an embeddable browser widget; the API persists, transcribes, and classifies submissions; agency staff triage and collaborate from a Next.js admin dashboard.
+
+## Problem
+
+Traditional feedback tools collect reports but leave agencies to manually interpret vague messages, prioritize across clients, and route work. That slows response time and makes multi-project portfolios hard to manage.
+
+## Solution
+
+Qelp combines a lightweight embeddable widget with async AI triage (title, labels, priority, sentiment) and an agency dashboard for filtering, analytics, assignment, and threaded comments.
+
+## Key capabilities
+
+1. **Embeddable widget** — text, screenshot capture, and voice notes with attachment upload.
+2. **AI triage** — OpenAI/Groq with deterministic fallback; optional Whisper STT for audio.
+3. **Agency dashboard** — portfolio inbox, KPI charts, filters, feedback detail, triage controls.
+4. **Multi-tenant workspaces** — projects, users, roles (`owner` / `manager` / `member`), widget tokens.
+5. **Secure intake** — public `POST /feedback` and `POST /uploads` gated by project widget token + rate limits.
+
+## Architecture
+
+| Layer | Stack |
+| --- | --- |
+| Widget | Vanilla TypeScript, esbuild IIFE, html2canvas, MediaRecorder |
+| API | Express 4, Postgres 16, Drizzle ORM, Zod |
+| Admin | Next.js 15 App Router, same-origin BFF for auth |
+| Shared | `@qelp/shared` contracts and seed data |
+
+## Workflow
+
+User submits feedback via widget → API stores row + attachments → async triage (STT → AI) → agency reviews in dashboard → status, assignment, and comments updated.
+
+## Repository layout
+
+- `apps/api` — REST API, migrations, triage pipeline, storage
+- `apps/admin` — dashboard and BFF route handlers
+- `packages/shared` — domain types and mock seed data
+- `packages/widget` — embeddable client widget
+- `docs/IMPLEMENTATION.md` — detailed implementation notes for the platform tiers work
+
+## Future enhancements
+
+Durable job queue for triage, S3-backed storage, GitHub/issue-tracker integration, email invites, full-text search index, mobile SDK.

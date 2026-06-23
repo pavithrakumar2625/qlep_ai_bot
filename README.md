@@ -104,3 +104,13 @@ This repo ships a portfolio-grade implementation. To run it on the public intern
 - `aiTriager` deterministic fallback path
 
 Repository-level integration tests against ephemeral Postgres are intentionally deferred. The CI workflow provisions a Postgres service container so they slot in cleanly when added.
+
+## Documentation
+
+- [`product_brief.md`](product_brief.md) — product overview and architecture summary
+- [`docs/IMPLEMENTATION.md`](docs/IMPLEMENTATION.md) — detailed implementation notes for the platform tiers branch
+- [`CLAUDE.md`](CLAUDE.md) — developer guide for agents and contributors working in this repo
+
+## License
+
+[MIT](LICENSE)

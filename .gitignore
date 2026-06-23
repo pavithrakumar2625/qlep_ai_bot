@@ -7,3 +7,5 @@ coverage
 *.log
 apps/api/storage/
 *.tsbuildinfo
+_qelp_tmp/
+IMPLEMENTATION.md.txt
